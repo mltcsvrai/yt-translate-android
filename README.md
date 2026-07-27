@@ -1,8 +1,8 @@
-# YT Çeviri (YouTube Context-Aware Translator)
+# YT Translate (YouTube Context-Aware Translator)
 
 ![Banner Placeholder](https://via.placeholder.com/1200x400?text=YT+Ceviri+App)
 
-**YT Çeviri** is an open-source, powerful mobile Android application and web wrapper designed to help you learn languages by providing context-aware, instantaneous translations of YouTube video subtitles. It natively bypasses CORS limits and brings the power of AI (Google Gemini) directly into your subtitle-watching experience.
+**YT Translate** is an open-source, powerful mobile Android application and web wrapper designed to help you learn languages by providing context-aware, instantaneous translations of YouTube video subtitles. It natively bypasses CORS limits and brings the power of AI (Google Gemini) directly into your subtitle-watching experience.
 
 ## ✨ Features
 
