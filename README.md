@@ -13,6 +13,13 @@
 - **Cloudflare Worker Backend**: A lightning-fast, edge-deployed Cloudflare Worker proxies and caches YouTube metadata efficiently.
 - **Bring Your Own Key (BYOK)**: The app is entirely open-source and free. Users simply input their own Google Gemini API key to activate the intelligent translations.
 
+## 📥 Download & Install
+
+**For Mobile Users:** You don't need to build the app from scratch! 
+1. Go to the [Releases page](https://github.com/mltcsvrai/yt-translate-android/releases).
+2. Download the latest `app-release.apk` file to your Android device.
+3. Install the APK, open the app, enter your Gemini API key, and start watching!
+
 ## 🚀 How It Works (Bring Your Own API Key)
 
 This project does not ship with a hardcoded API key to remain free and open-source. 
