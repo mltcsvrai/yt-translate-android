@@ -13,24 +13,39 @@ export const SubtitleOverlay: React.FC = React.memo(() => {
   const fontSize = useAppStore(s => s.fontSize);
   const showSubtitleBg = useAppStore(s => s.showSubtitleBg);
 
-  // O(log N) Binary Search for active cue
+  // O(1) Amortized Linear Search for active cue (Handles overlaps perfectly)
+  const lastIndexRef = useRef(0);
   const currentCue = useMemo(() => {
     if (cues.length === 0) return null;
     const adjustedTime = currentTime + syncOffset;
     
-    let left = 0;
-    let right = cues.length - 1;
-    while (left <= right) {
-      const mid = Math.floor((left + right) / 2);
-      const cue = cues[mid];
-      if (adjustedTime >= cue.start && adjustedTime <= cue.end) {
-        return cue;
-      } else if (adjustedTime < cue.start) {
-        right = mid - 1;
-      } else {
-        left = mid + 1;
+    let bestIndex = -1;
+    // Fast path: Check around last known index first
+    const startIdx = Math.max(0, lastIndexRef.current - 5);
+    const endIdx = Math.min(cues.length - 1, lastIndexRef.current + 5);
+    
+    for (let i = startIdx; i <= endIdx; i++) {
+      if (adjustedTime >= cues[i].start && adjustedTime <= cues[i].end) {
+        bestIndex = i;
+        break;
       }
     }
+
+    // Fallback: Full linear scan if jumped far
+    if (bestIndex === -1) {
+      for (let i = 0; i < cues.length; i++) {
+        if (adjustedTime >= cues[i].start && adjustedTime <= cues[i].end) {
+          bestIndex = i;
+          break;
+        }
+      }
+    }
+
+    if (bestIndex !== -1) {
+      lastIndexRef.current = bestIndex;
+      return cues[bestIndex];
+    }
+    
     return null;
   }, [cues, currentTime, syncOffset]);
 

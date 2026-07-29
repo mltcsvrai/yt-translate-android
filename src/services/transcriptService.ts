@@ -8,7 +8,7 @@ export function extractYouTubeId(urlOrId: string): string {
     return clean;
   }
   
-  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|shorts\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+  const regExp = /[\s\S]*(youtu\.be\/|v\/|u\/\w\/|embed\/|shorts\/|watch\?v=|\&v=)([^#\&\?\s]*)/;
   const match = clean.match(regExp);
   return (match && match[2].length === 11) ? match[2] : clean;
 }
@@ -118,7 +118,7 @@ export async function fetchVideoSubtitles(
 
   // 1. Try Local Server Dev Endpoint (Fastest on Dev)
   try {
-    const res = await smartFetch(`/api/transcript?v=${videoId}&lang=${sourceLang}`, undefined, 2500);
+    const res = await smartFetch(`https://yt-ceviri-api.erencloudflare.workers.dev/api/transcript?v=${videoId}&app_token=ytceviri_secure_2026&lang=${sourceLang}`, undefined, 2500);
     if (res.ok) {
       const data = await res.json();
       if (data.cues && Array.isArray(data.cues) && data.cues.length > 0) {
@@ -215,7 +215,7 @@ export async function fetchVideoSubtitles(
 async function fetchClientInnerTube(videoId: string, sourceLang: string = 'auto'): Promise<{ cues: any[]; lang: string }> {
   const watchRes = await smartFetch(`https://www.youtube.com/watch?v=${videoId}`, {
     headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
-  }, 4000);
+  }, 10000);
   const html = await watchRes.text();
 
   const keyMatch = html.match(/"INNERTUBE_API_KEY":"([^"]+)"/);
@@ -230,7 +230,7 @@ async function fetchClientInnerTube(videoId: string, sourceLang: string = 'auto'
       context: { client: { clientName: 'ANDROID', clientVersion: '20.10.38' } },
       videoId
     })
-  }, 4000);
+  }, 10000);
 
   const playerData = await playerRes.json();
   const captionTracks = playerData?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
@@ -254,7 +254,7 @@ async function fetchClientInnerTube(videoId: string, sourceLang: string = 'auto'
 
   const xmlRes = await smartFetch(baseUrl, {
     headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
-  }, 4000);
+  }, 10000);
   const xmlData = await xmlRes.text();
 
   const lines = parseTimedTextXml(xmlData);
@@ -321,21 +321,31 @@ async function translateFastParallel(cues: SubtitleCue[], sourceLang: string, ta
     }
   }
 
-  // Process in chunks of 20 to avoid 429 Too Many Requests
-  const chunkSize = 20;
-  for (let i = 0; i < groups.length; i += chunkSize) {
-    const chunk = groups.slice(i, i + chunkSize);
-    await Promise.all(
-      chunk.map(async (group) => {
-        try {
-          group.translatedText = await translateGTX(group.sourceText, sourceLang, targetLang);
-        } catch (e) {
-          group.translatedText = group.sourceText;
+  // Process in batches of 40 using <div> batching to completely avoid 429 Too Many Requests
+  const batchSize = 40;
+  for (let i = 0; i < groups.length; i += batchSize) {
+    const chunk = groups.slice(i, i + batchSize);
+    
+    // Combine texts into <div> blocks
+    const combinedHtml = chunk.map(g => `<div>${g.sourceText}</div>`).join('');
+    
+    try {
+      const translatedHtml = await translateGTX(combinedHtml, sourceLang, targetLang);
+      
+      // Extract translated texts from <div> blocks
+      const translatedDivs = translatedHtml.match(/<div[^>]*>([\s\S]*?)<\/div>/gi);
+      
+      for (let j = 0; j < chunk.length; j++) {
+        if (translatedDivs && translatedDivs[j]) {
+          chunk[j].translatedText = translatedDivs[j].replace(/<\/?div[^>]*>/gi, '').trim();
+        } else {
+          chunk[j].translatedText = chunk[j].sourceText;
         }
-      })
-    );
-    if (i + chunkSize < groups.length) {
-      await new Promise(resolve => setTimeout(resolve, 500)); // Delay between chunks
+      }
+    } catch (e) {
+      for (const group of chunk) {
+        group.translatedText = group.sourceText;
+      }
     }
   }
 

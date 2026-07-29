@@ -21,6 +21,14 @@ export default {
     // Endpoint 1: App Version & Live Update Manifest
     // Now served statically via Cloudflare Assets from the /public directory!
 
+    // Security Token Check for APIs
+    if (url.pathname.startsWith('/api/')) {
+      const token = url.searchParams.get('app_token');
+      if (token !== 'ytceviri_secure_2026') {
+        return new Response(JSON.stringify({ error: 'Unauthorized Access' }), { status: 401, headers: corsHeaders });
+      }
+    }
+
     // Endpoint 2: Download Landing Page
     if (url.pathname === '/download') {
       const html = `<!DOCTYPE html>

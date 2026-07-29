@@ -46,6 +46,8 @@ interface AppState {
   
   isSettingsOpen: boolean;
   setIsSettingsOpen: (isOpen: boolean) => void;
+  isHistoryOpen: boolean;
+  setIsHistoryOpen: (isOpen: boolean) => void;
   
   isSearchOpen: boolean;
   setIsSearchOpen: (isOpen: boolean) => void;
@@ -68,7 +70,7 @@ interface AppState {
 import { lookupWord } from '../services/dictionaryService';
 
 export const useAppStore = create<AppState>((set, get) => ({
-  videoId: '0VBIICYDjPo',
+  videoId: '',
   setVideoId: (id) => set({ videoId: id }),
   
   cues: [],
@@ -112,6 +114,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   
   isSettingsOpen: false,
   setIsSettingsOpen: (isOpen) => set({ isSettingsOpen: isOpen }),
+  isHistoryOpen: false,
+  setIsHistoryOpen: (isOpen) => set({ isHistoryOpen: isOpen }),
   
   isSearchOpen: false,
   setIsSearchOpen: (isOpen) => set({ isSearchOpen: isOpen }),

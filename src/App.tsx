@@ -6,9 +6,10 @@ import { TopSearchOverlay } from './components/TopSearchOverlay';
 import { ApiKeyModal } from './components/ApiKeyModal';
 import { fetchVideoSubtitles, extractYouTubeId } from './services/transcriptService';
 import { checkAppUpdates, applyInAppUpdate, type AppUpdateInfo } from './services/updateService';
-import { RefreshCw, CheckCircle2, Download } from 'lucide-react';
+import { RefreshCw, CheckCircle2, Download, MonitorPlay } from 'lucide-react';
 import { get, set } from 'idb-keyval';
 import { OnboardingModal } from './components/OnboardingModal';
+import { HistoryModal, type HistoryItem } from './components/HistoryModal';
 import { useTranslation } from './i18n/TranslationContext';
 import { useAppStore } from './store/useAppStore';
 import { SendIntent } from 'capacitor-plugin-send-intent';
@@ -40,6 +41,8 @@ export function App() {
   const setIsSearchOpen = useAppStore(s => s.setIsSearchOpen);
   const isSettingsOpen = useAppStore(s => s.isSettingsOpen);
   const setIsSettingsOpen = useAppStore(s => s.setIsSettingsOpen);
+  const isHistoryOpen = useAppStore(s => s.isHistoryOpen);
+  const setIsHistoryOpen = useAppStore(s => s.setIsHistoryOpen);
   const apiKey = useAppStore(s => s.apiKey);
   const setApiKey = useAppStore(s => s.setApiKey);
   const sourceLang = useAppStore(s => s.sourceLang);
@@ -184,6 +187,12 @@ export function App() {
     const currentRequest = `${videoId}_${sourceLang}_${targetLang}`;
     activeRequestRef.current = currentRequest;
     
+    if (!videoId) {
+      setCues([]);
+      setLoadingSubtitles(false);
+      return;
+    }
+    
     setCues([]);
     setLoadingSubtitles(true);
 
@@ -210,36 +219,78 @@ export function App() {
   }, [videoId, apiKey, sourceLang, targetLang, setCues, setLoadingSubtitles]);
 
   // Handle Loading a new Video URL or ID
-  const handleLoadVideo = (urlOrId: string) => {
+  const handleLoadVideo = async (urlOrId: string) => {
     const extracted = extractYouTubeId(urlOrId);
-    if (extracted !== videoId) {
+    const currentVideoId = useAppStore.getState().videoId;
+    if (extracted !== currentVideoId) {
       setCues([]);
       setVideoId(extracted);
       setActiveWordTranslation(null);
+
+      // Add to History
+      try {
+        let currentHistory = await get<HistoryItem[]>('yt_ceviri_history_list') || [];
+        // Remove if it already exists to move it to the top
+        currentHistory = currentHistory.filter(item => item.videoId !== extracted);
+        currentHistory.unshift({ videoId: extracted, timestamp: Date.now() });
+        // Cap at 20
+        if (currentHistory.length > 20) {
+          currentHistory = currentHistory.slice(0, 20);
+        }
+        await set('yt_ceviri_history_list', currentHistory);
+      } catch (e) {
+        console.warn('Failed to save history', e);
+      }
     }
   };
 
   // Check for shared links (SendIntent) from Android
   useEffect(() => {
+    let listener: any = null;
+
     const checkIntent = async () => {
       try {
-        const result: any = await (SendIntent as any).checkSendIntentReceived();
-        if (result && (result.url || result.value || result.title)) {
-          const text = result.url || result.value || result.title;
-          if (text) handleLoadVideo(text);
+        const result = await (SendIntent as any).checkSendIntentReceived();
+        if (result && (result.url || result.title || result.value)) {
+          const text = result.url || result.title || result.value;
+          const extracted = extractYouTubeId(text);
+          if (extracted && extracted !== useAppStore.getState().videoId) {
+            handleLoadVideo(text);
+          }
         }
-      } catch (e) {
-        console.warn('SendIntent check failed', e);
+      } catch (err) {
+        // No intent received
       }
     };
-    
-    // Check when component mounts
-    checkIntent();
-    
-    // Listen for new intents while app is open
-    window.addEventListener('sendIntentReceived', checkIntent);
+
+    const setupIntentListener = async () => {
+      // 1. Check initial intent on app launch (Requires custom patched checkSendIntentReceived)
+      await checkIntent();
+
+      // 2. Listen for intents while app is running in background
+      try {
+        listener = await (SendIntent as any).addListener('appSendActionIntent', (data: any) => {
+          if (data && data.extras) {
+            const text = data.extras['android.intent.extra.TEXT'] || data.extras.url || data.extras.value || data.extras.title;
+            if (text) {
+              const extracted = extractYouTubeId(text);
+              if (extracted && extracted !== useAppStore.getState().videoId) {
+                handleLoadVideo(text);
+              }
+            }
+          }
+        });
+      } catch (e) {
+        console.warn('Failed to add SendIntent listener:', e);
+      }
+    };
+
+    setupIntentListener();
+
     return () => {
-      window.removeEventListener('sendIntentReceived', checkIntent);
+      if (listener) {
+        listener.remove();
+      }
     };
   }, []);
 
@@ -264,6 +315,20 @@ export function App() {
         onClose={() => setIsSearchOpen(false)}
         onLoadVideo={handleLoadVideo}
       />
+      
+      <HistoryModal
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        onLoadVideo={handleLoadVideo}
+      />
+
+      <button
+        onClick={() => setIsHistoryOpen(true)}
+        className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900/80 hover:bg-slate-800/90 border border-slate-700/50 backdrop-blur-md px-4 py-2 rounded-full flex items-center space-x-2 transition-all shadow-lg text-slate-300 hover:text-emerald-400 group cursor-pointer"
+      >
+        <MonitorPlay className="w-4 h-4 opacity-70 group-hover:opacity-100 transition-opacity" />
+        <span className="text-sm font-semibold tracking-wide">Geçmiş</span>
+      </button>
 
       {isApplyingUpdate && (
         <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-6 space-y-4">
@@ -292,31 +357,44 @@ export function App() {
       )}
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-center space-y-6">
-        <div className="w-full relative max-w-5xl aspect-video group rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]">
-          <YouTubePlayer
-            ref={playerRef}
-            videoId={videoId}
-            initialStartTime={savedStartTime}
-            onTimeUpdate={(t) => setCurrentTime(t)}
-            onStateChange={() => {}}
-            externalPauseRequest={externalPause}
-            playbackRate={playbackRate}
-          >
-            {loadingSubtitles && cues.length === 0 ? (
-              <div className="pointer-events-auto flex items-center space-x-2 bg-slate-900/90 backdrop-blur-md px-5 py-3 rounded-2xl border border-white/10 shadow-2xl animate-pulse">
-                <RefreshCw className="w-4 h-4 text-red-500 animate-spin" />
-                <span className="text-xs font-semibold text-slate-300">
-                  {t('loading')}
-                </span>
+        <div className="w-full relative max-w-5xl aspect-video group rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] bg-slate-900/50 backdrop-blur-xl border border-white/10 flex items-center justify-center">
+          {!videoId ? (
+            <div className="flex flex-col items-center justify-center text-center p-8 space-y-6 max-w-md">
+              <div className="w-24 h-24 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-full flex items-center justify-center border border-white/10 shadow-lg mb-4 relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-purple-500 opacity-20 blur-xl"></div>
+                <MonitorPlay className="w-12 h-12 text-indigo-400 relative z-10" />
               </div>
-            ) : cues.length === 0 ? (
-              <div className="pointer-events-auto flex flex-col items-center justify-center p-6 bg-slate-900/90 backdrop-blur-md rounded-2xl border border-white/10 shadow-2xl">
-                <p className="text-slate-300 text-sm font-semibold mb-3">{t('noSubtitles')}</p>
-              </div>
-            ) : (
-              <SubtitleOverlay />
-            )}
-          </YouTubePlayer>
+              <h2 className="text-2xl font-bold text-white tracking-tight">YT Çeviri'ye Hoş Geldiniz</h2>
+              <p className="text-slate-300 text-sm leading-relaxed">
+                İzlemek istediğiniz bir YouTube videosunu açmak için sağ alttaki menüden <strong className="text-indigo-400">Arama</strong> butonunu kullanabilir veya doğrudan YouTube uygulamasından <strong className="text-purple-400">Paylaş</strong> diyerek YT Çeviri'yi seçebilirsiniz.
+              </p>
+            </div>
+          ) : (
+            <YouTubePlayer
+              ref={playerRef}
+              videoId={videoId}
+              initialStartTime={savedStartTime}
+              onTimeUpdate={(t) => setCurrentTime(t)}
+              onStateChange={() => {}}
+              externalPauseRequest={externalPause}
+              playbackRate={playbackRate}
+            >
+              {loadingSubtitles && cues.length === 0 ? (
+                <div className="pointer-events-auto flex items-center space-x-2 bg-slate-900/90 backdrop-blur-md px-5 py-3 rounded-2xl border border-white/10 shadow-2xl animate-pulse">
+                  <RefreshCw className="w-4 h-4 text-red-500 animate-spin" />
+                  <span className="text-xs font-semibold text-slate-300">
+                    {t('loading')}
+                  </span>
+                </div>
+              ) : cues.length === 0 ? (
+                <div className="pointer-events-auto flex flex-col items-center justify-center p-6 bg-slate-900/90 backdrop-blur-md rounded-2xl border border-white/10 shadow-2xl">
+                  <p className="text-slate-300 text-sm font-semibold mb-3">{t('noSubtitles')}</p>
+                </div>
+              ) : (
+                <SubtitleOverlay />
+              )}
+            </YouTubePlayer>
+          )}
         </div>
       </main>
 

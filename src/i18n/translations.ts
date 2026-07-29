@@ -62,7 +62,8 @@ export const translations = {
     notFound: 'Bulunamadı',
     literalTranslation: 'Kelime Çevirisi',
     contextAware: 'Bağlama Uygun',
-    subtitleSync: 'Zamanlama'
+    subtitleSync: 'Zamanlama',
+    clearHistoryConfirm: 'Geçmişi temizlemek istediğinize emin misiniz?'
   },
   en: {
     welcome: 'Welcome',
@@ -125,7 +126,8 @@ export const translations = {
     notFound: 'Not found',
     literalTranslation: 'Literal Translation',
     contextAware: 'Context-Aware',
-    subtitleSync: 'Timing'
+    subtitleSync: 'Timing',
+    clearHistoryConfirm: 'Are you sure you want to clear your history?'
   },
   de: {
     welcome: 'Willkommen',
@@ -188,7 +190,8 @@ export const translations = {
     notFound: 'Nicht gefunden',
     literalTranslation: 'Wörtliche Übersetzung',
     contextAware: 'Kontextbezogen',
-    subtitleSync: 'Zeitmessung'
+    subtitleSync: 'Zeitmessung',
+    clearHistoryConfirm: 'Möchten Sie Ihren Verlauf wirklich löschen?'
   },
   es: {
     welcome: 'Bienvenido',
@@ -251,7 +254,8 @@ export const translations = {
     notFound: 'No encontrado',
     literalTranslation: 'Traducción Literal',
     contextAware: 'Contextual',
-    subtitleSync: 'Sincronización'
+    subtitleSync: 'Sincronización',
+    clearHistoryConfirm: '¿Estás seguro de que quieres borrar tu historial?'
   },
   fr: {
     welcome: 'Bienvenue',
@@ -314,7 +318,8 @@ export const translations = {
     notFound: 'Non trouvé',
     literalTranslation: 'Traduction Littérale',
     contextAware: 'Contextuelle',
-    subtitleSync: 'Synchronisation'
+    subtitleSync: 'Synchronisation',
+    clearHistoryConfirm: 'Êtes-vous sûr de vouloir effacer votre historique ?'
   }
 };
 
