@@ -1,31 +1,14 @@
 import React, { useState } from 'react';
 import { Search, Settings, Type, Pause, Play, DownloadCloud, MonitorPlay } from 'lucide-react';
 import type { AppUpdateInfo } from '../services/updateService';
-import type { SubtitleMode } from '../types';
 import { useTranslation } from '../i18n/TranslationContext';
+import { useAppStore } from '../store/useAppStore';
 
 interface FloatingDockProps {
   onSearchToggle: () => void;
   onSettingsOpen: () => void;
   updateInfo: AppUpdateInfo | null;
   onApplyUpdate: () => void;
-  // Subtitle Settings
-  fontSize: number;
-  onFontSizeChange: (val: number) => void;
-  subtitleMode: SubtitleMode;
-  onModeChange: (val: SubtitleMode) => void;
-  sourceLang: string;
-  targetLang: string;
-  onLanguageChange: (type: 'source' | 'target', val: string) => void;
-  // Video Settings
-  autoPause: boolean;
-  onAutoPauseChange: (val: boolean) => void;
-  playbackRate: number;
-  onPlaybackRateChange: (rate: number) => void;
-  showSubtitleBg: boolean;
-  onToggleSubtitleBg: () => void;
-  syncOffset: number;
-  onSyncOffsetChange: (val: number) => void;
 }
 
 export const FloatingDock: React.FC<FloatingDockProps> = ({
@@ -33,24 +16,36 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
   onSettingsOpen,
   updateInfo,
   onApplyUpdate,
-  fontSize,
-  onFontSizeChange,
-  subtitleMode,
-  onModeChange,
-  sourceLang,
-  targetLang,
-  onLanguageChange,
-  autoPause,
-  onAutoPauseChange,
-  playbackRate,
-  onPlaybackRateChange,
-  showSubtitleBg,
-  onToggleSubtitleBg,
-  syncOffset,
-  onSyncOffsetChange
 }) => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'subtitle' | 'video' | null>(null);
+
+  // Zustand State
+  const fontSize = useAppStore(s => s.fontSize);
+  const onFontSizeChange = useAppStore(s => s.setFontSize);
+  const subtitleMode = useAppStore(s => s.subtitleMode);
+  const onModeChange = useAppStore(s => s.setSubtitleMode);
+  const sourceLang = useAppStore(s => s.sourceLang);
+  const onSourceLangChange = useAppStore(s => s.setSourceLang);
+  const targetLang = useAppStore(s => s.targetLang);
+  const onTargetLangChange = useAppStore(s => s.setTargetLang);
+  const autoPause = useAppStore(s => s.autoPause);
+  const onAutoPauseChange = useAppStore(s => s.setAutoPause);
+  const playbackRate = useAppStore(s => s.playbackRate);
+  const onPlaybackRateChange = useAppStore(s => s.setPlaybackRate);
+  const showSubtitleBg = useAppStore(s => s.showSubtitleBg);
+  const setShowSubtitleBg = useAppStore(s => s.setShowSubtitleBg);
+  const syncOffset = useAppStore(s => s.syncOffset);
+  const onSyncOffsetChange = useAppStore(s => s.setSyncOffset);
+
+  const onLanguageChange = (type: 'source' | 'target', val: string) => {
+    if (type === 'source') onSourceLangChange(val);
+    else onTargetLangChange(val);
+  };
+
+  const onToggleSubtitleBg = () => {
+    setShowSubtitleBg(!showSubtitleBg);
+  };
 
   return (
     <div className="fixed bottom-6 left-0 right-0 z-50 flex flex-col items-center justify-end pointer-events-none transition-all duration-300">

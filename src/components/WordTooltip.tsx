@@ -1,22 +1,26 @@
-import React from 'react';
+import React, { forwardRef } from 'react';
 import type { WordTranslation } from '../types';
-import { Volume2, X, Sparkles } from 'lucide-react';
+import { Volume2, X, Sparkles, Copy, Check } from 'lucide-react';
 import { useTranslation } from '../i18n/TranslationContext';
+import { Clipboard } from '@capacitor/clipboard';
 
 interface WordTooltipProps {
   translation: WordTranslation | null;
   loading: boolean;
   isTurkish?: boolean;
   onClose: () => void;
+  style?: React.CSSProperties;
 }
 
-export const WordTooltip: React.FC<WordTooltipProps> = ({
+export const WordTooltip = forwardRef<HTMLDivElement, WordTooltipProps>(({
   translation,
   loading,
   isTurkish,
-  onClose
-}) => {
+  onClose,
+  style
+}, ref) => {
   const { t } = useTranslation();
+  const [copied, setCopied] = React.useState(false);
 
   if (!translation && !loading) return null;
 
@@ -29,14 +33,25 @@ export const WordTooltip: React.FC<WordTooltipProps> = ({
     }
   };
 
+  const handleCopy = async () => {
+    if (translation) {
+      await Clipboard.write({
+        string: `${translation.word} - ${translation.translation}`
+      });
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
   return (
     <div
-      className="absolute top-0 left-1/2 mb-3 z-50 animate-fade-in-up cursor-default"
+      ref={ref}
+      style={{ ...style, zIndex: 100 }}
+      className="absolute animate-fade-in-up cursor-default"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="relative bg-slate-900/90 backdrop-blur-xl border border-red-500/30 text-white rounded-2xl p-4 shadow-2xl min-w-[240px] max-w-[320px]">
-        {/* Pointer Arrow */}
-        <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-slate-900/90 border-r border-b border-red-500/30 rotate-45"></div>
+      <div className="relative bg-slate-900/90 backdrop-blur-xl border border-red-500/30 text-white rounded-2xl p-4 shadow-[0_0_40px_rgba(0,0,0,0.8)] min-w-[240px] max-w-[320px]">
+        {/* Pointer Arrow removed for floating-ui shift support */}
 
         {/* Close Button */}
         <button
@@ -62,6 +77,13 @@ export const WordTooltip: React.FC<WordTooltipProps> = ({
                   className="p-1.5 text-white/70 hover:text-white bg-white/5 hover:bg-white/10 rounded-full transition-all flex items-center justify-center shrink-0"
                 >
                   <Volume2 className="w-4 h-4" />
+                </button>
+                <button 
+                  onClick={handleCopy}
+                  className="p-1.5 text-white/70 hover:text-white bg-white/5 hover:bg-white/10 rounded-full transition-all flex items-center justify-center shrink-0"
+                  title="Copy to Clipboard"
+                >
+                  {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                 </button>
               </div>
             </div>
@@ -100,4 +122,4 @@ export const WordTooltip: React.FC<WordTooltipProps> = ({
       </div>
     </div>
   );
-};
+});

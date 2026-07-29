@@ -230,11 +230,11 @@ export default {
         }
 
         if (lines.length === 0) {
-          const textRegex = /<text start="([^"]+)" dur="([^"]+)"[^>]*>([^<]+)<\/text>/g;
+          const textRegex = /<text\s+start="([^"]+)"\s+dur="([^"]+)"[^>]*>([\s\S]*?)<\/text>/g;
           while ((m = textRegex.exec(xmlData)) !== null) {
             const start = parseFloat(m[1]);
             const dur = parseFloat(m[2]);
-            const text = m[3].replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/\n/g, ' ').trim();
+            const text = m[3].replace(/<[^>]+>/g, '').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/\n/g, ' ').trim();
             if (text) {
               lines.push({ id: String(idx++), start, end: start + dur, text });
             }

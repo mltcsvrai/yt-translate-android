@@ -4,51 +4,52 @@ import { SubtitleOverlay } from './components/SubtitleOverlay';
 import { FloatingDock } from './components/FloatingDock';
 import { TopSearchOverlay } from './components/TopSearchOverlay';
 import { ApiKeyModal } from './components/ApiKeyModal';
-import type { SubtitleCue, SubtitleMode, WordTranslation } from './types';
 import { fetchVideoSubtitles, extractYouTubeId } from './services/transcriptService';
-import { lookupWord } from './services/dictionaryService';
 import { checkAppUpdates, applyInAppUpdate, type AppUpdateInfo } from './services/updateService';
 import { RefreshCw, CheckCircle2, Download } from 'lucide-react';
 import { get, set } from 'idb-keyval';
 import { OnboardingModal } from './components/OnboardingModal';
 import { useTranslation } from './i18n/TranslationContext';
+import { useAppStore } from './store/useAppStore';
+import { SendIntent } from 'capacitor-plugin-send-intent';
 
 export function App() {
   const { t } = useTranslation();
   const playerRef = useRef<YouTubePlayerHandle>(null);
   
+  // Local UI States that don't need to be global
   const [showOnboarding, setShowOnboarding] = useState(false);
-  
-  // Read last watched videoId from localStorage if available
-  const [videoId, setVideoId] = useState<string>('0VBIICYDjPo');
-
-  const [cues, setCues] = useState<SubtitleCue[]>([]);
-  const [currentTime, setCurrentTime] = useState<number>(0);
-  const [loadingSubtitles, setLoadingSubtitles] = useState<boolean>(false);
-  const [savedStartTime, setSavedStartTime] = useState<number>(0);
   const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
   const [isApplyingUpdate, setIsApplyingUpdate] = useState<boolean>(false);
   const [updateProgress, setUpdateProgress] = useState<number>(0);
   const [updateSuccessMsg, setUpdateSuccessMsg] = useState<string | null>(null);
 
-  // Settings state
-  const [subtitleMode, setSubtitleMode] = useState<SubtitleMode>('DUAL');
-  const [fontSize, setFontSize] = useState<number>(25); // 25px default
-  const [activeWordTranslation, setActiveWordTranslation] = useState<WordTranslation | null>(null);
-  const [wordLoading, setWordLoading] = useState<boolean>(false);
-  const [activeTokenId, setActiveTokenId] = useState<string | null>(null);
-  const [externalPause, setExternalPause] = useState<boolean>(false);
-  const [apiKey, setApiKey] = useState<string>('');
-  const [autoPause, setAutoPause] = useState<boolean>(true);
-  const [playbackRate, setPlaybackRate] = useState<number>(1);
-  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
-  const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
-  
-  // Language States
-  const [sourceLang, setSourceLang] = useState<string>('auto');
-  const [targetLang, setTargetLang] = useState<string>('tr');
-  const [showSubtitleBg, setShowSubtitleBg] = useState<boolean>(true);
-  const [syncOffset, setSyncOffset] = useState<number>(1.5);
+  // Zustand Global State Selectors
+  const videoId = useAppStore(s => s.videoId);
+  const setVideoId = useAppStore(s => s.setVideoId);
+  const cues = useAppStore(s => s.cues);
+  const setCues = useAppStore(s => s.setCues);
+  const setCurrentTime = useAppStore(s => s.setCurrentTime);
+  const loadingSubtitles = useAppStore(s => s.loadingSubtitles);
+  const setLoadingSubtitles = useAppStore(s => s.setLoadingSubtitles);
+  const savedStartTime = useAppStore(s => s.savedStartTime);
+  const setSavedStartTime = useAppStore(s => s.setSavedStartTime);
+  const externalPause = useAppStore(s => s.externalPause);
+  const playbackRate = useAppStore(s => s.playbackRate);
+  const isSearchOpen = useAppStore(s => s.isSearchOpen);
+  const setIsSearchOpen = useAppStore(s => s.setIsSearchOpen);
+  const isSettingsOpen = useAppStore(s => s.isSettingsOpen);
+  const setIsSettingsOpen = useAppStore(s => s.setIsSettingsOpen);
+  const apiKey = useAppStore(s => s.apiKey);
+  const setApiKey = useAppStore(s => s.setApiKey);
+  const sourceLang = useAppStore(s => s.sourceLang);
+  const setSourceLang = useAppStore(s => s.setSourceLang);
+  const targetLang = useAppStore(s => s.targetLang);
+  const setTargetLang = useAppStore(s => s.setTargetLang);
+  const setShowSubtitleBg = useAppStore(s => s.setShowSubtitleBg);
+  const setSyncOffset = useAppStore(s => s.setSyncOffset);
+  const lookupWordAction = useAppStore(s => s.lookupWordAction);
+  const setActiveWordTranslation = useAppStore(s => s.setActiveWordTranslation);
 
   // Check for Cloudflare App Live Updates on mount
   useEffect(() => {
@@ -69,21 +70,24 @@ export function App() {
         await set('yt_ceviri_last_video', oldLastVideo);
         localStorage.removeItem('yt_ceviri_last_video');
       }
-      const oldHistory = localStorage.getItem('yt_ceviri_watch_history');
-      if (oldHistory !== null) {
-        try {
-          await set('yt_ceviri_watch_history', JSON.parse(oldHistory));
-        } catch (e) {}
-        localStorage.removeItem('yt_ceviri_watch_history');
-      }
       const oldBg = localStorage.getItem('yt_ceviri_subtitle_bg');
       if (oldBg !== null) {
         await set('yt_ceviri_subtitle_bg', oldBg !== 'false');
         localStorage.removeItem('yt_ceviri_subtitle_bg');
       }
+      const oldHistory = localStorage.getItem('yt_ceviri_watch_history');
+      if (oldHistory !== null) {
+        // Migration to new per-video history keys
+        try {
+          const hist = JSON.parse(oldHistory);
+          for (const [vid, time] of Object.entries(hist)) {
+             await set(`watch_history_${vid}`, time);
+          }
+        } catch (e) {}
+        localStorage.removeItem('yt_ceviri_watch_history');
+      }
 
       // Load from IDB
-      const loadState = async () => {
       try {
         const [savedVideoId, savedKey, savedSourceLang, savedTargetLang, savedOnboarding] = await Promise.all([
           get<string>('yt_ceviri_video_id'),
@@ -107,11 +111,9 @@ export function App() {
         console.error('Failed to load state from DB', e);
         setShowOnboarding(true);
       }
-    };
-    loadState();
     }
     initStorage();
-  }, []);
+  }, []); // Run once on mount
 
   // Handle 100% In-App Instant Updating with CapacitorUpdater
   const handleApplyInAppUpdate = async () => {
@@ -125,7 +127,6 @@ export function App() {
         updateInfo.bundleUrl,
         (percent) => setUpdateProgress(percent)
       );
-      // Wait a tiny bit before we show success (though the app will restart naturally)
       setTimeout(() => {
         setUpdateInfo(null);
         setIsApplyingUpdate(false);
@@ -139,42 +140,41 @@ export function App() {
     }
   };
 
-  // Load saved watch position whenever videoId changes
+  // Load saved watch position whenever videoId changes (per-video key to prevent race conditions)
   useEffect(() => {
     async function loadSavedTime() {
       try {
-        const history = await get('yt_ceviri_watch_history') || {};
-        if (history[videoId] && typeof history[videoId] === 'number') {
-          setSavedStartTime(history[videoId]);
-        } else {
-          setSavedStartTime(0);
-        }
+        const time = await get(`watch_history_${videoId}`);
+        setSavedStartTime(typeof time === 'number' ? time : 0);
       } catch (e) {
         console.warn('Failed to load saved time:', e);
       }
     }
     loadSavedTime();
-  }, [videoId]);
+  }, [videoId, setSavedStartTime]);
 
-  const lastSaveTimeRef = useRef(0);
-
-  // Save current watch progress to IDB (Throttled)
+  // Handle Word & Idiom Lookup Events from SubtitleOverlay
   useEffect(() => {
-    if (currentTime > 2 && videoId) {
-      const now = Date.now();
-      // Only save to IDB every 5 seconds to avoid heavy I/O
-      if (now - lastSaveTimeRef.current > 5000) {
-        lastSaveTimeRef.current = now;
-        get('yt_ceviri_watch_history').then((history: any) => {
-          const h = history || {};
-          h[videoId] = Math.floor(currentTime);
-          return set('yt_ceviri_watch_history', h);
-        }).catch(e => console.warn('IDB save error:', e));
-        
-        set('yt_ceviri_last_video', videoId).catch(() => {});
-      }
-    }
-  }, [currentTime, videoId]);
+    const handleWordLookup = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const { word, isTargetWord, tokenId } = customEvent.detail;
+      lookupWordAction(word, isTargetWord, tokenId);
+    };
+
+    const handleIdiomLookup = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const idiom = customEvent.detail;
+      lookupWordAction(idiom, false, 'idiom-selection');
+    };
+
+    window.addEventListener('yt-ceviri-word-lookup', handleWordLookup);
+    window.addEventListener('yt-ceviri-idiom-lookup', handleIdiomLookup);
+    
+    return () => {
+      window.removeEventListener('yt-ceviri-word-lookup', handleWordLookup);
+      window.removeEventListener('yt-ceviri-idiom-lookup', handleIdiomLookup);
+    };
+  }, [lookupWordAction]);
 
   const activeRequestRef = useRef<string>('');
 
@@ -184,7 +184,6 @@ export function App() {
     const currentRequest = `${videoId}_${sourceLang}_${targetLang}`;
     activeRequestRef.current = currentRequest;
     
-    // BUG FIX: Clear existing cues when videoId changes to prevent overlap
     setCues([]);
     setLoadingSubtitles(true);
 
@@ -208,82 +207,46 @@ export function App() {
     loadSubs();
 
     return () => { isMounted = false; };
-  }, [videoId, apiKey, sourceLang, targetLang]);
-
-  // Compute active cue for current playback time
-  const adjustedTime = currentTime + syncOffset;
-  const currentCue = cues.find(c => adjustedTime >= c.start && adjustedTime <= c.end) || null;
+  }, [videoId, apiKey, sourceLang, targetLang, setCues, setLoadingSubtitles]);
 
   // Handle Loading a new Video URL or ID
   const handleLoadVideo = (urlOrId: string) => {
     const extracted = extractYouTubeId(urlOrId);
     if (extracted !== videoId) {
-      setCues([]); // Ensure old subtitles don't stick on screen
+      setCues([]);
       setVideoId(extracted);
       setActiveWordTranslation(null);
     }
   };
 
+  // Check for shared links (SendIntent) from Android
+  useEffect(() => {
+    const checkIntent = async () => {
+      try {
+        const result: any = await (SendIntent as any).checkSendIntentReceived();
+        if (result && (result.url || result.value || result.title)) {
+          const text = result.url || result.value || result.title;
+          if (text) handleLoadVideo(text);
+        }
+      } catch (e) {
+        console.warn('SendIntent check failed', e);
+      }
+    };
+    
+    // Check when component mounts
+    checkIntent();
+    
+    // Listen for new intents while app is open
+    window.addEventListener('sendIntentReceived', checkIntent);
+    return () => {
+      window.removeEventListener('sendIntentReceived', checkIntent);
+    };
+  }, []);
+
   // Save API Key
   const handleSaveApiKey = (key: string) => {
     setApiKey(key);
     set('yt_ceviri_gemini_key', key);
-  };
-
-  const handleLanguageChange = (type: 'source' | 'target', val: string) => {
-    if (type === 'source') {
-      setSourceLang(val);
-      set('yt_ceviri_source_lang', val);
-    } else {
-      setTargetLang(val);
-      set('yt_ceviri_target_lang', val);
-    }
-  };
-
-  const lookupRef = useRef<number>(0);
-
-  // Handle Word Click event from subtitle
-  const handleWordClick = async (word: string, isTurkish: boolean = false, tokenId: string) => {
-    setActiveTokenId(tokenId);
-
-    if (autoPause) {
-      setExternalPause(true);
-      setTimeout(() => setExternalPause(false), 300);
-    }
-
-    setWordLoading(true);
-    const currentLookup = ++lookupRef.current;
-    
-    try {
-      const translation = await lookupWord(word, sourceLang, targetLang, isTurkish, apiKey);
-      if (currentLookup === lookupRef.current) {
-        setActiveWordTranslation(translation);
-      }
-    } catch (err) {
-      console.warn('Word translation error:', err);
-      if (currentLookup === lookupRef.current) {
-        setActiveWordTranslation({
-          word,
-          normalizedWord: word,
-          translation: 'Bulunamadı'
-        });
-      }
-    } finally {
-      if (currentLookup === lookupRef.current) {
-        setWordLoading(false);
-      }
-    }
-  };
-
-  const handleToggleSubtitleBg = () => {
-    const newVal = !showSubtitleBg;
-    setShowSubtitleBg(newVal);
-    set('yt_ceviri_subtitle_bg', newVal);
-  };
-
-  const handleSyncOffsetChange = (val: number) => {
-    setSyncOffset(val);
-    set('yt_ceviri_sync_offset', val);
   };
 
   return (
@@ -302,7 +265,6 @@ export function App() {
         onLoadVideo={handleLoadVideo}
       />
 
-      {/* In-App Live Updating Overlay Progress */}
       {isApplyingUpdate && (
         <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-6 space-y-4">
           <div className="w-14 h-14 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
@@ -318,7 +280,6 @@ export function App() {
         </div>
       )}
 
-      {/* Success Toast Notification */}
       {updateSuccessMsg && (
         <div className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-8 text-center">
             <div className="flex flex-col items-center">
@@ -330,9 +291,7 @@ export function App() {
         </div>
       )}
 
-      {/* Main Content Area (Samsung Tab S9+ Optimized) */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-center space-y-6">
-        {/* Video Player Container with Video Subtitle Overlay */}
         <div className="w-full relative max-w-5xl aspect-video group rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]">
           <YouTubePlayer
             ref={playerRef}
@@ -355,26 +314,12 @@ export function App() {
                 <p className="text-slate-300 text-sm font-semibold mb-3">{t('noSubtitles')}</p>
               </div>
             ) : (
-                <SubtitleOverlay
-                  currentCue={currentCue}
-                  mode={subtitleMode}
-                  fontSize={fontSize}
-                  onWordClick={handleWordClick}
-                activeTokenId={activeTokenId}
-                activeWordTranslation={activeWordTranslation}
-                wordLoading={wordLoading}
-                onCloseTooltip={() => {
-                  setActiveTokenId(null);
-                  setActiveWordTranslation(null);
-                }}
-                showSubtitleBg={showSubtitleBg}
-              />
+              <SubtitleOverlay />
             )}
           </YouTubePlayer>
         </div>
       </main>
 
-      {/* Bottom-Right Floating Update Available Toast Notification */}
       {updateInfo?.hasUpdate && !isApplyingUpdate && (
         <div className="fixed bottom-24 right-6 z-50 bg-emerald-950/95 border border-emerald-500/50 text-white p-4 rounded-2xl shadow-2xl backdrop-blur-xl flex items-center space-x-3 animate-bounce">
           <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
@@ -394,31 +339,13 @@ export function App() {
         </div>
       )}
 
-
-      {/* Modern Floating Dock (Replaces Header & ControlBar) */}
       <FloatingDock 
         onSearchToggle={() => setIsSearchOpen(true)}
         onSettingsOpen={() => setIsSettingsOpen(true)}
         updateInfo={updateInfo}
         onApplyUpdate={handleApplyInAppUpdate}
-        fontSize={fontSize}
-        onFontSizeChange={setFontSize}
-        autoPause={autoPause}
-        onAutoPauseChange={setAutoPause}
-        subtitleMode={subtitleMode}
-        onModeChange={setSubtitleMode}
-        playbackRate={playbackRate}
-        onPlaybackRateChange={setPlaybackRate}
-        sourceLang={sourceLang}
-        targetLang={targetLang}
-        onLanguageChange={handleLanguageChange}
-        showSubtitleBg={showSubtitleBg}
-        onToggleSubtitleBg={handleToggleSubtitleBg}
-        syncOffset={syncOffset}
-        onSyncOffsetChange={handleSyncOffsetChange}
       />
 
-      {/* Settings & Gemini API Modal */}
       <ApiKeyModal 
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
